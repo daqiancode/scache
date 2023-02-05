@@ -46,7 +46,7 @@ func (s *RedisCache[T, I]) ClearCache(objs ...T) error {
 			keys = append(keys, s.MakeCacheKey(u))
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), OpTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), RdisOpTimeout)
 	defer cancel()
 	keys = UniqueStrings(keys)
 	return s.red.Del(ctx, keys...).Err()
