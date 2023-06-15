@@ -246,6 +246,9 @@ func (s *RedisHashJson[T, I]) HMGetJson(key string, ids ...I) ([]T, error) {
 		return r, err
 	}
 	for _, v := range raw {
+		if v == nil {
+			continue
+		}
 		var t T
 		err = s.serializer.Unmarshal(v.(string), &t)
 		if err != nil {
