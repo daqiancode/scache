@@ -2,6 +2,7 @@ package scache
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -208,4 +209,14 @@ func (s *FullRedisCache[T, I]) ListBy(index Index, orderBys OrderBys) ([]T, erro
 	// set ids to redis
 	err = s.redIds.SetJson(redisKey, ids)
 	return r, err
+}
+
+// ListIn list objs by index field in values
+func (s *FullRedisCache[T, I]) ListByUniqueInts(field string, values []int64) ([]T, error) {
+	return nil, errors.New("not implemented, please use ListAll instead")
+}
+
+// ListIn list objs by index field in values
+func (s *FullRedisCache[T, I]) ListByUniqueStrs(field string, values []string) ([]T, error) {
+	return nil, errors.New("not implemented, please use ListAll instead")
 }

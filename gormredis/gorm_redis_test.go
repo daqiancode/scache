@@ -45,17 +45,18 @@ func getRedisClient() *redis.Client {
 type Commodity struct {
 	Id         string
 	Name       string
-	CategoryId int
+	CategoryId uint64
+	UserId     int64
 }
 
 func (s Commodity) GetID() string {
 	return s.Id
 }
 func (s Commodity) ListIndexes() scache.Indexes {
-	return scache.Indexes{}.Add(scache.Index{}.Add("CategoryId", s.CategoryId))
+	return scache.Indexes{}.Add(scache.Index{}.Add("CategoryId", s.CategoryId)).Add(scache.Index{}.Add("Name", s.Name))
 }
 func createCache() scache.Cache[Commodity, string] {
-	return gormredis.NewGormRedis[Commodity, string]("app", "commodity", "Id", GetDBClient(), getRedisClient(), 10*time.Second)
+	return gormredis.NewGormRedis[Commodity, string]("app", "commodity", "Id", GetDBClient(), getRedisClient(), 100*time.Second)
 
 }
 func createCacheFull() scache.FullCache[Commodity, string] {
@@ -82,7 +83,7 @@ func TestGormRedisMain(t *testing.T) {
 	fmt.Println(exists)
 	assert.False(t, exists)
 	assert.Equal(t, c.Id, "")
-	d := Commodity{Id: id, Name: "tom", CategoryId: 1}
+	d := Commodity{Id: id, Name: "tom", CategoryId: 1, UserId: 1}
 	err = ca.Create(&d)
 	assert.Nil(t, err)
 	r1, exists, err := ca.GetBy(scache.NewIndex("CategoryId", 1))
@@ -118,4 +119,32 @@ func TestCacheFull(t *testing.T) {
 	fmt.Println(s.GetBy(scache.NewIndex("CategoryId", 1)))
 	fmt.Println(s.GetBy(scache.NewIndex("CategoryId", 2)))
 	fmt.Println(s.GetBy(scache.NewIndex("CategoryId", 2)))
+}
+
+func TestListByUniqueInts(t *testing.T) {
+	s := createCache()
+	for i := 0; i < 3; i++ {
+
+		c, err := s.ListByUniqueInts("CategoryId", []int64{1, 2})
+		assert.Nil(t, err)
+		assert.True(t, len(c) > 0)
+		fmt.Println(i, c)
+	}
+}
+
+func TestListByUniqueStrs(t *testing.T) {
+	s := createCache()
+	for i := 0; i < 1; i++ {
+		c, err := s.ListByUniqueStrs("Name", []string{"tom", "Jerry"})
+		assert.Nil(t, err)
+		assert.True(t, len(c) > 0)
+		fmt.Println(i, c)
+	}
+}
+
+func TestUpdate(t *testing.T) {
+	s := createCache()
+	rowsAffected, err := s.Update("1", map[string]interface{}{"Name": "tom1", "UserId": 2})
+	assert.Nil(t, err)
+	assert.Equal(t, int64(1), rowsAffected)
 }

@@ -202,3 +202,29 @@ func (s *Mongo[T, I]) ListAll() ([]T, error) {
 	err = r.All(s.ctx, &t)
 	return t, err
 }
+
+func (s *Mongo[T, I]) ListByUniqueInts(field string, values []int64) ([]T, error) {
+	var t []T
+	var err error
+	query := bson.M{field: bson.M{"$in": values}}
+	r, err := s.c.Find(s.ctx, query)
+	if err != nil {
+		return t, err
+	}
+	// err = r.Decode(&t)
+	err = r.All(s.ctx, &t)
+	return t, err
+}
+
+func (s *Mongo[T, I]) ListByUniqueStrs(field string, values []string) ([]T, error) {
+	var t []T
+	var err error
+	query := bson.M{field: bson.M{"$in": values}}
+	r, err := s.c.Find(s.ctx, query)
+	if err != nil {
+		return t, err
+	}
+	// err = r.Decode(&t)
+	err = r.All(s.ctx, &t)
+	return t, err
+}

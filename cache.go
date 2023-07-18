@@ -117,6 +117,10 @@ type DBCRUD[T Table[I], I IDType] interface {
 	ListBy(index Index, initOrders OrderBys) ([]T, error)
 	//close lower clients
 	Close() error
+	//ListByUniqueInts list objs by unique index field in values
+	ListByUniqueInts(field string, values []int64) ([]T, error)
+	//ListByUniqueStrs list objs by unique index field in values
+	ListByUniqueStrs(field string, values []string) ([]T, error)
 }
 
 // Cache
@@ -215,9 +219,9 @@ func (s *CacheBase[T, I]) MakeCacheKey(index Index) string {
 	keys := index.Fields()
 	sort.Strings(keys)
 	for _, k := range keys {
-		r += "/" + k + "/" + Stringify(index[k], "null")
+		r += "/" + strings.ToLower(k) + "/" + Stringify(index[k], "null")
 	}
-	return strings.ToLower(r)
+	return r
 }
 
 func (s *CacheBase[T, I]) SetIdField(idField string) {

@@ -53,6 +53,11 @@ func (s *Gorm[T, I]) Update(id I, values interface{}) (int64, error) {
 	if !exists {
 		return 0, nil
 	}
+	if vs, ok := values.(map[string]interface{}); ok {
+		for k, v := range vs {
+			vs[s.db.NamingStrategy.ColumnName(s.table, k)] = v
+		}
+	}
 	rs := s.db.Model(&old).Updates(values)
 	if rs.Error != nil {
 		return 0, rs.Error
@@ -114,6 +119,26 @@ func (s *Gorm[T, I]) ListBy(index scache.Index, initOrders scache.OrderBys) ([]T
 func (s *Gorm[T, I]) ListAll() ([]T, error) {
 	var r []T
 	if err := s.db.Find(&r).Error; err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// ListIn list objs by index field in values
+func (s *Gorm[T, I]) ListByUniqueInts(field string, values []int64) ([]T, error) {
+	dbField := s.db.NamingStrategy.ColumnName(s.table, field)
+	var r []T
+	if err := s.db.Where(dbField+" in ?", values).Find(&r).Error; err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// ListIn list objs by index field in values
+func (s *Gorm[T, I]) ListByUniqueStrs(field string, values []string) ([]T, error) {
+	dbField := s.db.NamingStrategy.ColumnName(s.table, field)
+	var r []T
+	if err := s.db.Where(dbField+" in ?", values).Find(&r).Error; err != nil {
 		return nil, err
 	}
 	return r, nil

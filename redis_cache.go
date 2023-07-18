@@ -2,6 +2,7 @@ package scache
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -10,8 +11,8 @@ import (
 type RedisCache[T Table[I], I IDType] struct {
 	*CacheBase[T, I]
 	red    *RedisJson[T]
-	redId  *RedisJson[I]
-	redIds *RedisJson[[]I]
+	redId  *RedisJson[I]   // unique index,1 index to 1 id
+	redIds *RedisJson[[]I] // normal index, 1 index to multple ids
 	db     DBCRUD[T, I]
 }
 
@@ -267,4 +268,86 @@ func (s *RedisCache[T, I]) ListBy(index Index, orderBys OrderBys) ([]T, error) {
 	// set ids to redis
 	err = s.redIds.SetJson(redisKey, ids)
 	return r, err
+}
+
+// ListIn list objs by index field in values
+func (s *RedisCache[T, I]) ListByUniqueInts(field string, values []int64) ([]T, error) {
+	// fetch ids from redis
+	redisKeys := make([]string, len(values))
+	for i, v := range values {
+		redisKeys[i] = s.MakeCacheKey(NewIndex(field, v))
+	}
+	cachedIds, missedIndexes, err := s.redId.MGetJson(redisKeys)
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+	if len(missedIndexes) == 0 {
+		s.red.Expires(redisKeys...)
+		return s.List(cachedIds...)
+	}
+
+	rs, err := s.db.ListByUniqueInts(field, values)
+	if err != nil {
+		return nil, err
+	}
+	indexIds := make(map[int64]I)
+	rsValue := reflect.ValueOf(rs)
+	n := rsValue.Len()
+	canInt := false
+	for i := 0; i < n; i++ {
+		if i == 0 {
+			canInt = rsValue.Index(i).FieldByName(field).CanInt()
+		}
+		if canInt {
+			indexIds[rsValue.Index(i).FieldByName(field).Int()] = rs[i].GetID()
+		} else {
+			indexIds[int64(rsValue.Index(i).FieldByName(field).Uint())] = rs[i].GetID()
+		}
+	}
+	indexValues := make(map[string]interface{}, len(indexIds))
+	for _, v := range values {
+		indexValues[s.MakeCacheKey(NewIndex(field, v))] = indexIds[v]
+	}
+	err = s.redId.MSetJson(indexValues)
+	if err != nil {
+		return nil, err
+	}
+	return rs, nil
+}
+
+// ListIn list objs by index field in values
+func (s *RedisCache[T, I]) ListByUniqueStrs(field string, values []string) ([]T, error) {
+	// fetch ids from redis
+	redisKeys := make([]string, len(values))
+	for i, v := range values {
+		redisKeys[i] = s.MakeCacheKey(NewIndex(field, v))
+	}
+	cachedIds, missedIndexes, err := s.redId.MGetJson(redisKeys)
+	if err != nil && err != redis.Nil {
+		return nil, err
+	}
+	if len(missedIndexes) == 0 {
+		s.red.Expires(redisKeys...)
+		return s.List(cachedIds...)
+	}
+
+	rs, err := s.db.ListByUniqueStrs(field, values)
+	if err != nil {
+		return nil, err
+	}
+	indexIds := make(map[string]I)
+	rsValue := reflect.ValueOf(rs)
+	n := rsValue.Len()
+	for i := 0; i < n; i++ {
+		indexIds[rsValue.Index(i).FieldByName(field).String()] = rs[i].GetID()
+	}
+	indexValues := make(map[string]interface{}, len(indexIds))
+	for _, v := range values {
+		indexValues[s.MakeCacheKey(NewIndex(field, v))] = indexIds[v]
+	}
+	err = s.redId.MSetJson(indexValues)
+	if err != nil {
+		return nil, err
+	}
+	return rs, nil
 }
