@@ -22,7 +22,7 @@ func GetDBClient() *gorm.DB {
 		logger.Config{
 			SlowThreshold:             time.Second, // Slow SQL threshold
 			LogLevel:                  logger.Info, // Log level
-			IgnoreRecordNotFoundError: true,        // Ignore ErrRecordNotFound error for logger
+			IgnoreRecordNotFoundError: true,        // Ignore IgnoreRecordNotFoundError error for logger
 			Colorful:                  false,       // Disable color
 		},
 	)
@@ -78,42 +78,46 @@ func TestGormRedisMain(t *testing.T) {
 	ca := createCache()
 	_, err := ca.Delete(id)
 	assert.Nil(t, err)
-	c, exists, err := ca.Get(id)
-	assert.Nil(t, err)
-	fmt.Println(exists)
-	assert.False(t, exists)
+	c, err := ca.Get(id)
+	assert.Equal(t, scache.ErrRecordNotFound, err)
 	assert.Equal(t, c.Id, "")
 	d := Commodity{Id: id, Name: "tom", CategoryId: 1, UserId: 1}
 	err = ca.Create(&d)
 	assert.Nil(t, err)
-	r1, exists, err := ca.GetBy(scache.NewIndex("CategoryId", 1))
+	r1, err := ca.GetBy(scache.NewIndex("CategoryId", 1))
 	assert.Nil(t, err)
-	assert.True(t, exists)
 	assert.Equal(t, id, r1.Id)
-	r2, exists, err := ca.GetBy(scache.NewIndex("CategoryId", 100))
-	assert.Nil(t, err)
-	assert.False(t, exists)
+	r2, err := ca.GetBy(scache.NewIndex("CategoryId", 100))
+	assert.Equal(t, scache.ErrRecordNotFound, err)
 	assert.Equal(t, "", r2.Id)
 	r3, err := ca.ListBy(scache.NewIndex("CategoryId", 100), nil)
 	assert.Nil(t, err)
 	assert.Equal(t, 0, len(r3))
-
-	r5, exists, err := ca.Get("1")
+	_, err = ca.Update(id, map[string]any{"CategoryId": 100})
 	assert.Nil(t, err)
-	assert.True(t, exists)
+	r2, err = ca.GetBy(scache.NewIndex("CategoryId", 100))
+	assert.Nil(t, err)
+	assert.Equal(t, id, r2.Id)
+
+	r5, err := ca.Get("1")
+	assert.Nil(t, err)
 	assert.Equal(t, id, r5.Id)
 
 	r4, err := ca.List("1", "100")
 	assert.Nil(t, err)
 	assert.Equal(t, 2, len(r4))
 	assert.Equal(t, id, r4[0].Id)
+
+	ca.Delete("1")
+	r6, err := ca.Get("1")
+	assert.Equal(t, scache.ErrRecordNotFound, err)
+	assert.Equal(t, "", r6.Id)
 }
 
 func TestCacheFull(t *testing.T) {
 	s := createCacheFull()
-	c, exists, err := s.Get("1")
+	c, err := s.Get("1")
 	assert.Nil(t, err)
-	assert.True(t, exists)
 	fmt.Println(c)
 	fmt.Println(s.GetBy(scache.NewIndex("CategoryId", 1)))
 	fmt.Println(s.GetBy(scache.NewIndex("CategoryId", 1)))

@@ -73,11 +73,11 @@ func (s *Mongo[T, I]) Save(t *T) error {
 	if scache.IsNullID(id) {
 		return s.Create(t)
 	}
-	_, exist, err := s.Get(id)
-	if err != nil {
+	_, err := s.Get(id)
+	if err != nil && err != scache.ErrRecordNotFound {
 		return nil
 	}
-	if !exist {
+	if err == scache.ErrRecordNotFound {
 		return s.Create(t)
 	}
 	query := bson.M{"_id": id}
@@ -129,29 +129,29 @@ func (s *Mongo[T, I]) Delete(ids ...I) (int64, error) {
 
 	return rs.DeletedCount, err
 }
-func (s *Mongo[T, I]) Get(id I) (T, bool, error) {
+func (s *Mongo[T, I]) Get(id I) (T, error) {
 	var t T
 	r := s.c.FindOne(s.ctx, bson.M{"_id": id})
 	if err := r.Err(); err != nil {
 		if mongo.ErrNoDocuments == err {
-			return t, false, nil
+			return t, scache.ErrRecordNotFound
 		}
-		return t, false, err
+		return t, err
 	}
 	err := r.Decode(&t)
-	return t, true, err
+	return t, err
 }
-func (s *Mongo[T, I]) GetBy(index scache.Index) (T, bool, error) {
+func (s *Mongo[T, I]) GetBy(index scache.Index) (T, error) {
 	var t T
 	r := s.c.FindOne(s.ctx, index)
 	if err := r.Err(); err != nil {
 		if mongo.ErrNoDocuments == err {
-			return t, false, nil
+			return t, scache.ErrRecordNotFound
 		}
-		return t, false, err
+		return t, err
 	}
 	err := r.Decode(&t)
-	return t, true, err
+	return t, err
 }
 func (s *Mongo[T, I]) List(ids ...I) ([]T, error) {
 	var t []T

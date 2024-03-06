@@ -41,19 +41,16 @@ func NewRedisJson[T any](client *redis.Client, ttl time.Duration) *RedisJson[T] 
 	}
 }
 
-func (s *RedisJson[T]) GetJson(key string) (T, bool, error) {
+func (s *RedisJson[T]) GetJson(key string) (T, error) {
 	var r T
 	ctx, cancel := context.WithTimeout(context.Background(), RdisOpTimeout)
 	defer cancel()
 	y, err := s.Get(ctx, key).Result()
 	if err != nil {
-		if err == redis.Nil {
-			return r, false, nil
-		}
-		return r, false, err
+		return r, err
 	}
 	err = s.serializer.Unmarshal(y, &r)
-	return r, true, err
+	return r, err
 }
 
 func (s *RedisJson[T]) SetJson(key string, obj T) error {
@@ -189,20 +186,18 @@ func NewRedisHashJson[T Table[I], I IDType](client *redis.Client, ttl time.Durat
 	}
 }
 
-func (s *RedisHashJson[T, I]) HGetJson(key string, id I) (T, bool, error) {
+func (s *RedisHashJson[T, I]) HGetJson(key string, id I) (T, error) {
 	idStr := Stringify(id, "")
 	ctx, cancel := context.WithTimeout(context.Background(), RdisOpTimeout)
 	defer cancel()
 	var r T
 	raw, err := s.HGet(ctx, key, idStr).Result()
 	if err != nil {
-		if err == redis.Nil {
-			return r, false, nil
-		}
-		return r, false, err
+
+		return r, err
 	}
 	err = s.serializer.Unmarshal(raw, &r)
-	return r, true, err
+	return r, err
 }
 
 func (s *RedisHashJson[T, I]) HGetAllJson(key string) ([]T, error) {

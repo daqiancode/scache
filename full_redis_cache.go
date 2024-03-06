@@ -60,20 +60,24 @@ func (s *FullRedisCache[T, I]) Load() error {
 	return s.red.Expire(s.ctx, key, s.red.ttl).Err()
 }
 
-func (s *FullRedisCache[T, I]) Get(id I) (T, bool, error) {
+func (s *FullRedisCache[T, I]) Get(id I) (T, error) {
 	key := s.CacheKey()
-	r, exists, err := s.red.HGetJson(key, id)
+	r, err := s.red.HGetJson(key, id)
 	if err != nil {
-		return r, false, err
+		return r, err
 	}
-	if exists {
-		return r, true, nil
+	if err == nil {
+		return r, nil
 	}
 	if err := s.Load(); err != nil {
-		return r, false, err
+		return r, err
 	}
 	s.red.Expires(key)
-	return s.red.HGetJson(key, id)
+	r, err = s.red.HGetJson(key, id)
+	if err == redis.Nil {
+		return r, ErrRecordNotFound
+	}
+	return r, err
 }
 
 func (s *FullRedisCache[T, I]) List(id ...I) ([]T, error) {
@@ -98,11 +102,11 @@ func (s *FullRedisCache[T, I]) Create(r *T) error {
 	return s.red.HSetJson(s.CacheKey(), *r)
 }
 func (s *FullRedisCache[T, I]) Save(r *T) error {
-	_, exists, err := s.Get((*r).GetID())
-	if err != nil {
+	_, err := s.Get((*r).GetID())
+	if err != nil && err != ErrRecordNotFound {
 		return err
 	}
-	if IsNullID((*r).GetID()) || !exists {
+	if IsNullID((*r).GetID()) || err == ErrRecordNotFound {
 		if err := s.db.Create(r); err != nil {
 			return err
 		}
@@ -122,7 +126,7 @@ func (s *FullRedisCache[T, I]) Update(id I, values interface{}) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	r, _, err := s.db.Get(id)
+	r, err := s.db.Get(id)
 	if err != nil {
 		return 0, err
 	}
@@ -156,44 +160,44 @@ func (s *FullRedisCache[T, I]) ClearCache(objs ...T) error {
 	return s.red.Del(s.ctx, s.CacheKey()).Err()
 }
 
-func (s *FullRedisCache[T, I]) GetBy(index Index) (T, bool, error) {
+func (s *FullRedisCache[T, I]) GetBy(index Index) (T, error) {
 	// fetch id from redis
 	redisKey := s.MakeCacheKey(index)
 	var r T
-	cachedId, exists, err := s.redId.GetJson(redisKey)
+	cachedId, err := s.redId.GetJson(redisKey)
 	if err != nil && err != redis.Nil {
-		return r, false, err
+		return r, err
 	}
-	if exists && IsNullID(cachedId) {
-		return r, false, nil
+	if err == nil && IsNullID(cachedId) {
+		return r, nil
 	}
-	if exists {
+	if err == nil {
 		s.red.Expires(redisKey)
 		return s.Get(cachedId)
 	}
 	// search from db
-	r, exists, err = s.db.GetBy(index)
-	if err != nil {
-		return r, false, err
+	r, err = s.db.GetBy(index)
+	if err != nil && err != ErrRecordNotFound {
+		return r, err
 	}
-	if !exists {
+	if err == ErrRecordNotFound {
 		err = s.red.SetNull(redisKey)
-		return r, exists, err
+		return r, ErrRecordNotFound
 	}
 	// set id to redis
 	err = s.redId.SetJson(redisKey, r.GetID())
-	return r, true, err
+	return r, err
 }
 
 func (s *FullRedisCache[T, I]) ListBy(index Index, orderBys OrderBys) ([]T, error) {
 	// fetch ids from redis
 	redisKey := s.MakeCacheKey(index)
 	var r []T
-	cachedIds, exists, err := s.redIds.GetJson(redisKey)
+	cachedIds, err := s.redIds.GetJson(redisKey)
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
-	if exists {
+	if err == nil {
 		s.red.Expires(redisKey)
 		return s.List(cachedIds...)
 	}

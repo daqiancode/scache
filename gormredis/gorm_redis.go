@@ -36,22 +36,19 @@ func (s *Gorm[T, I]) Create(r *T) error {
 	return nil
 }
 func (s *Gorm[T, I]) Save(r *T) error {
-	_, exists, err := s.Get((*r).GetID())
-	if err != nil {
+	_, err := s.Get((*r).GetID())
+	if err != nil && err != scache.ErrRecordNotFound {
 		return err
 	}
-	if !exists {
+	if err == scache.ErrRecordNotFound {
 		return s.Create(r)
 	}
 	return s.db.Save(r).Error
 }
 func (s *Gorm[T, I]) Update(id I, values interface{}) (int64, error) {
-	old, exists, err := s.Get(id)
+	old, err := s.Get(id)
 	if err != nil {
 		return 0, err
-	}
-	if !exists {
-		return 0, nil
 	}
 	if vs, ok := values.(map[string]interface{}); ok {
 		for k, v := range vs {
@@ -71,17 +68,17 @@ func (s *Gorm[T, I]) Delete(ids ...I) (int64, error) {
 	}
 	return rs.RowsAffected, nil
 }
-func (s *Gorm[T, I]) Get(id I) (T, bool, error) {
+func (s *Gorm[T, I]) Get(id I) (T, error) {
 	var r T
 	if err := s.db.Where(map[string]interface{}{s.idField: id}).First(&r).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return r, false, nil
+			return r, scache.ErrRecordNotFound
 		}
-		return r, false, err
+		return r, err
 	}
-	return r, true, nil
+	return r, nil
 }
-func (s *Gorm[T, I]) GetBy(index scache.Index) (T, bool, error) {
+func (s *Gorm[T, I]) GetBy(index scache.Index) (T, error) {
 	var r T
 	index1 := make(scache.Index, len(index))
 	for k, v := range index {
@@ -89,11 +86,11 @@ func (s *Gorm[T, I]) GetBy(index scache.Index) (T, bool, error) {
 	}
 	if err := s.db.Where(map[string]interface{}(index1)).First(&r).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return r, false, nil
+			return r, scache.ErrRecordNotFound
 		}
-		return r, false, err
+		return r, err
 	}
-	return r, true, nil
+	return r, nil
 }
 func (s *Gorm[T, I]) List(ids ...I) ([]T, error) {
 	var r []T

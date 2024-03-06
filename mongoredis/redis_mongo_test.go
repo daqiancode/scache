@@ -69,9 +69,9 @@ func TestBasic(t *testing.T) {
 	err := rm.Save(&c)
 	assert.Nil(t, err)
 
-	c1, exist, err := rm.Get("62c7d675b562f2ded137850")
+	c1, err := rm.Get("62c7d675b562f2ded137850")
 	assert.Nil(t, err)
-	fmt.Println(c1, exist)
+	fmt.Println(c1)
 	cs, err := rm.List("62c7d675b562f2ded137850f", "62c7d6aab9d0167a8b31c329", "62c7d675b562f2ded137850g")
 	assert.Nil(t, err)
 	fmt.Println(cs)
@@ -81,9 +81,9 @@ func TestBasic(t *testing.T) {
 	// fmt.Printf("%#v\n", c)
 	rm.Update("62c7d675b562f2ded137850f", map[string]interface{}{"addr.country": "uae", "tags.0.name": "gg"})
 	// rm.Delete("62c7d675b562f2ded137850f")
-	c2, exists, err := rm.GetBy(scache.NewIndex("tags.0.name", "gg"))
+	c2, err := rm.GetBy(scache.NewIndex("tags.0.name", "gg"))
 	assert.Nil(t, err)
-	fmt.Println(c2, exists)
+	fmt.Println(c2)
 
 	c3, err := rm.ListBy(scache.NewIndex("name", "mobile"), nil)
 	assert.Nil(t, err)
@@ -92,8 +92,7 @@ func TestBasic(t *testing.T) {
 
 func TestCacheFull(t *testing.T) {
 	rm := mongoredis.NewMongoRedisFull[Commodity, string]("mongo", "test", "c1", "Id", getMongoClient(), getRedisClient(), 100*time.Second)
-	c1, exist, err := rm.Get("62c7d675b562f2ded137850f")
+	c1, err := rm.Get("62c7d675b562f2ded137850f")
 	assert.Nil(t, err)
-	assert.True(t, exist)
 	fmt.Println(c1)
 }

@@ -2,11 +2,14 @@ package scache
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+var ErrRecordNotFound = errors.New("record not exist")
 
 type RedisCache[T Table[I], I IDType] struct {
 	*CacheBase[T, I]
@@ -90,11 +93,11 @@ func (s *RedisCache[T, I]) Delete(ids ...I) (int64, error) {
 	return rowsAffected, err
 }
 func (s *RedisCache[T, I]) Save(obj *T) error {
-	old, exists, err := s.Get((*obj).GetID())
-	if err != nil {
+	old, err := s.Get((*obj).GetID())
+	if err != nil && err != ErrRecordNotFound {
 		return err
 	}
-	if IsNullID((*obj).GetID()) || !exists {
+	if IsNullID((*obj).GetID()) || err == ErrRecordNotFound {
 		if err := s.db.Create(obj); err != nil {
 			return err
 		}
@@ -112,7 +115,7 @@ func (s *RedisCache[T, I]) Update(id I, values interface{}) (int64, error) {
 	if IsNullID(id) {
 		return 0, nil
 	}
-	old, _, err := s.Get(id)
+	old, err := s.Get(id)
 	if err != nil {
 		return 0, err
 	}
@@ -121,32 +124,38 @@ func (s *RedisCache[T, I]) Update(id I, values interface{}) (int64, error) {
 		return 0, err
 	}
 
-	obj, _, err := s.Get(id)
+	obj, err := s.db.Get(id)
 	s.ClearCache(old, obj)
 	// err = s.ClearCache(old.GetID(), old.ListIndexes().Merge(obj.ListIndexes()))
 	return effectedRows, err
 }
 
-func (s *RedisCache[T, I]) Get(id I) (T, bool, error) {
+func (s *RedisCache[T, I]) Get(id I) (T, error) {
 	redisKey := s.MakeCacheKey(NewIndex(s.GetIdField(), id))
-	r, exists, err := s.red.GetJson(redisKey)
-	if err != nil {
-		return r, false, err
+	r, err := s.red.GetJson(redisKey)
+	if err != nil && err != redis.Nil {
+		return r, err
 	}
-	if exists {
+	if err == nil {
 		s.red.Expires(redisKey)
-		return r, true, nil
+		return r, nil
 	}
-	r, exists, err = s.db.Get(id)
-	if err != nil {
-		return r, false, err
+	r, err = s.db.Get(id)
+	if err != nil && err != ErrRecordNotFound {
+		return r, err
 	}
-	if !exists {
-		err = s.red.SetNull(redisKey)
-		return r, exists, err
+	if err == ErrRecordNotFound {
+		errSet := s.red.SetNull(redisKey)
+		if errSet != nil {
+			return r, errSet
+		}
+		return r, err
 	}
-	err = s.red.SetJson(redisKey, r)
-	return r, true, err
+	errSet := s.red.SetJson(redisKey, r)
+	if errSet != nil {
+		return r, errSet
+	}
+	return r, err
 }
 
 // List list records by ids, order & empty records keeped
@@ -214,45 +223,52 @@ func (s *RedisCache[T, I]) List(ids ...I) ([]T, error) {
 	s.red.MSetJson(needToCache)
 	s.red.MSetNull(needToCacheNull)
 	return cachedRecords, nil
-
 }
-func (s *RedisCache[T, I]) GetBy(index Index) (T, bool, error) {
+
+func (s *RedisCache[T, I]) GetBy(index Index) (T, error) {
 	// fetch id from redis
 	redisKey := s.MakeCacheKey(index)
 	var r T
-	cachedId, exists, err := s.redId.GetJson(redisKey)
+	cachedId, err := s.redId.GetJson(redisKey)
 	if err != nil && err != redis.Nil {
-		return r, false, err
+		return r, err
 	}
-	if exists && IsNullID(cachedId) {
-		return r, false, nil
+	if err == nil && IsNullID(cachedId) {
+		return r, ErrRecordNotFound
 	}
-	if exists {
+	if err == nil {
 		s.red.Expires(redisKey)
 		return s.Get(cachedId)
 	}
 	// search from db
-	r, exists, err = s.db.GetBy(index)
+	r, err = s.db.GetBy(index)
+	if err == ErrRecordNotFound {
+		errSet := s.red.SetNull(redisKey)
+		if errSet != nil {
+			return r, errSet
+		}
+		return r, err
+	}
 	if err != nil {
-		return r, false, err
+		return r, err
 	}
-	if !exists {
-		err = s.red.SetNull(redisKey)
-		return r, exists, err
-	}
+
 	// set id to redis
-	err = s.redId.SetJson(redisKey, r.GetID())
-	return r, true, err
+	errSet := s.redId.SetJson(redisKey, r.GetID())
+	if errSet != nil {
+		return r, errSet
+	}
+	return r, err
 }
 func (s *RedisCache[T, I]) ListBy(index Index, orderBys OrderBys) ([]T, error) {
 	// fetch ids from redis
 	redisKey := s.MakeCacheKey(index)
 	var r []T
-	cachedIds, exists, err := s.redIds.GetJson(redisKey)
+	cachedIds, err := s.redIds.GetJson(redisKey)
 	if err != nil && err != redis.Nil {
 		return nil, err
 	}
-	if exists {
+	if err == nil {
 		s.red.Expires(redisKey)
 		return s.List(cachedIds...)
 	}

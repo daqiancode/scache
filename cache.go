@@ -108,11 +108,11 @@ type DBCRUD[T Table[I], I IDType] interface {
 	// values can be struct or map[string]interface{}, return (effectedrows,error)
 	Update(id I, values interface{}) (int64, error)
 	//get obj by id
-	Get(id I) (T, bool, error)
+	Get(id I) (T, error)
 	//list objs by ids
 	List(ids ...I) ([]T, error)
 	//get obj by index
-	GetBy(index Index) (T, bool, error)
+	GetBy(index Index) (T, error)
 	//list objs by indexes
 	ListBy(index Index, initOrders OrderBys) ([]T, error)
 	//close lower clients
