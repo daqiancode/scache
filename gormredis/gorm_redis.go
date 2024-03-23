@@ -50,12 +50,19 @@ func (s *Gorm[T, I]) Update(id I, values interface{}) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	var rs *gorm.DB
 	if vs, ok := values.(map[string]interface{}); ok {
+		if len(vs) == 0 {
+			return 0, nil
+		}
 		for k, v := range vs {
 			vs[s.db.NamingStrategy.ColumnName(s.table, k)] = v
 		}
+		rs = s.db.Model(&old).Updates(vs)
+
+	} else {
+		rs = s.db.Model(&old).Updates(values)
 	}
-	rs := s.db.Model(&old).Updates(values)
 	if rs.Error != nil {
 		return 0, rs.Error
 	}
